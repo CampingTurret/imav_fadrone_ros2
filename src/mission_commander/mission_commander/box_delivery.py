@@ -4,7 +4,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 import numpy as np
-from std_msgs.msg import String
+from std_msgs.msg import Bool
 from px4_msgs.msg import OffboardControlMode, TrajectorySetpoint, VehicleCommand, VehicleLocalPosition, VehicleStatus
 import time
 
@@ -24,7 +24,7 @@ class BoxDelivery(Node):
         self.trajectory_publisher = self.create_publisher(TrajectorySetpoint, '/fmu/in/trajectory_setpoint', qos_profile)
         self.vehicle_command_publisher = self.create_publisher(VehicleCommand, '/fmu/in/vehicle_command', qos_profile)
 
-        self.servo_position_publisher = self.create_publisher(String, '/servo_position', 10)
+        self.servo_position_publisher = self.create_publisher(Bool, '/servo_position', 10)
 
         # Create subscribers
         self.vehicle_local_position_subscriber = self.create_subscription(VehicleLocalPosition, '/fmu/out/vehicle_local_position', self.vehicle_local_position_callback, qos_profile)
@@ -39,7 +39,7 @@ class BoxDelivery(Node):
         self.started = False
         self.stage = 0
 
-        self.msg = String()
+        self.msg = Bool(data=False)
         self.retract_servo()
         self.pos_hold_counter = 0
  
@@ -72,11 +72,11 @@ class BoxDelivery(Node):
         self.get_logger().info('Land command sent')
 
     def retract_servo(self):
-        self.msg.data = "Retract servo"
+        self.msg.data = False
         self.servo_position_publisher.publish(self.msg)
 
     def extend_servo(self):
-        self.msg.data = "Extend servo"
+        self.msg.data = True
         self.servo_position_publisher.publish(self.msg)
 
     def publish_vehicle_command(self, command, param1=0.0, param2=0.0):

@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'box_delivery'
+package_name = 'servo_control'
 
 setup(
     name=package_name,
@@ -15,7 +15,7 @@ setup(
     zip_safe=True,
     maintainer='elijah',
     maintainer_email='elijah.anghw@gmail.com',
-    description='Package to handle box dropping',
+    description='Driver to control servo motor',
     license='Apache-2.0',
     extras_require={
         'test': [
@@ -24,7 +24,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'servo_sim = box_delivery.servo_sim:main'
+            'sim_servo = servo_control.sim_servo:main',
+            'real_servo = servo_control.real_servo:main'
         ],
     },
 )

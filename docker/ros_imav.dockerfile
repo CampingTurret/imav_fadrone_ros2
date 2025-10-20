@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install python packages
 RUN pip3 install numpy
+RUN pip3 install RPi.GPIO
 
 # Setup workspace
 WORKDIR /home/user/imav_ws
