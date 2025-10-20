@@ -10,6 +10,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-setuptools python3-vcstool curl gnupg2 lsb-release \
     && rm -rf /var/lib/apt/lists/*
 
+# Install python packages
+RUN pip3 install numpy
+
 # Setup workspace
 WORKDIR /home/user/imav_ws
 RUN mkdir -p src

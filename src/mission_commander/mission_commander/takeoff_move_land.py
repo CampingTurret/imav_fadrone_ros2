@@ -30,8 +30,8 @@ class TakeoffMoveLand(Node):
         self.offboard_setpoint_counter = 0
         self.vehicle_local_position = VehicleLocalPosition()
         self.vehicle_status = VehicleStatus()
-        self.takeoff_altitude = -5.0  # meters
-        self.move_distance = 5.0      # meters
+        self.takeoff_altitude = -2.0  # meters
+        self.move_distance = 2.0      # meters
  
         # Create timer
         self.timer = self.create_timer(0.1, self.timer_callback)  # 10 Hz

@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'auto_mission'
+package_name = 'mission_commander'
 
 setup(
     name=package_name,
@@ -24,8 +24,9 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'takeoff_move_land = auto_mission.takeoff_move_land:main',
-            'takeoff_land = auto_mission.takeoff_land:main'
+            'takeoff_move_land = mission_commander.takeoff_move_land:main',
+            'takeoff_land = mission_commander.takeoff_land:main',
+            'box_delivery = mission_commander.box_delivery:main'
         ],
     },
 )
