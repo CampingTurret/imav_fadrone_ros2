@@ -15,7 +15,7 @@ WORKDIR /home/user/imav_ws
 RUN mkdir -p src
 
 # Clone px4_msg
-RUN git clone -b release/1.15 https://github.com/PX4/px4_msgs.git /home/user/imav_ws/src/px4_msg
+RUN git clone https://github.com/elijahanghw/px4_msgs_minimal.git /home/user/imav_ws/src/px4_msg
 
 # Copy local workspace
 COPY ./src /home/user/imav_ws/src
