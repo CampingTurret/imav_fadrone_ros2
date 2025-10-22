@@ -39,7 +39,7 @@ class BoxDelivery(Node):
         self.started = False
         self.stage = 0
 
-        self.msg = Bool(data=False)
+        self.servo_msg = Bool(data=False)
         self.retract_servo()
         self.pos_hold_counter = 0
  
@@ -72,12 +72,12 @@ class BoxDelivery(Node):
         self.get_logger().info('Land command sent')
 
     def retract_servo(self):
-        self.msg.data = False
-        self.servo_position_publisher.publish(self.msg)
+        self.servo_msg.data = False
+        self.servo_position_publisher.publish(self.servo_msg)
 
     def extend_servo(self):
-        self.msg.data = True
-        self.servo_position_publisher.publish(self.msg)
+        self.servo_msg.data = True
+        self.servo_position_publisher.publish(self.servo_msg)
 
     def publish_vehicle_command(self, command, param1=0.0, param2=0.0):
         msg = VehicleCommand()
