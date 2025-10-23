@@ -124,12 +124,20 @@ class BoxDelivery(Node):
         #     self.publish_position_setpoint(x, y, z)
         
         # Stage 0: Arm and ready
-        if not self.started and self.stage == 0 and self.offboard_setpoint_counter == 10 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
+        if not self.started and self.stage == 0 and self.offboard_setpoint_counter >= 10 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
             # self.set_offboard_mode()
+            self.get_logger().info("Arming drone")
             self.arm()
             self.started = True
             self.stage = 1
             self.retract_servo()
+
+        elif not self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
+            self.get_logger().info("Waiting for OFFBOARD mode")
+
+        if self.started and not self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
+            self.get_logger().info("Mission aborted")
+            exit(0)
 
         altitude_error = abs(self.vehicle_local_position.z - self.takeoff_altitude)
         vehicle_pos = np.array([self.vehicle_local_position.x , self.vehicle_local_position.y])
