@@ -63,9 +63,9 @@ class BoxDelivery(Node):
         self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, 0.0)
         self.get_logger().info('Disarming command sent')
 
-    def set_offboard_mode(self):
-        self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1.0, 6.0)  # custom_mode=6 → OFFBOARD
-        self.get_logger().info('Set OFFBOARD mode command sent')
+    # def set_offboard_mode(self):
+    #     self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1.0, 6.0)  # custom_mode=6 -> OFFBOARD
+    #     self.get_logger().info('Set OFFBOARD mode command sent')
 
     def land(self):
         self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_LAND)
@@ -112,17 +112,32 @@ class BoxDelivery(Node):
         msg.body_rate = False
         self.offboard_publisher.publish(msg)
 
-    # Main loop: Finite State Machine
+    # Main loop: State Machine
     def timer_callback(self) -> None:
         self.publish_offboard_control_heartbeat_signal()
+
+        # Always publish position setpoint so OFFBOARD can be engaged
+        # if not self.started:
+        #     x = self.vehicle_local_position.x if np.isfinite(self.vehicle_local_position.x) else 0.0
+        #     y = self.vehicle_local_position.y if np.isfinite(self.vehicle_local_position.y) else 0.0
+        #     z = self.vehicle_local_position.z if np.isfinite(self.vehicle_local_position.z) else 0.0
+        #     self.publish_position_setpoint(x, y, z)
         
         # Stage 0: Arm and ready
-        if not self.started and self.offboard_setpoint_counter == 10:
-            self.set_offboard_mode()
+        if not self.started and self.stage == 0 and self.offboard_setpoint_counter >= 10 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
+            # self.set_offboard_mode()
+            self.get_logger().info("Arming drone")
             self.arm()
             self.started = True
             self.stage = 1
             self.retract_servo()
+
+        elif not self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
+            self.get_logger().info("Waiting for OFFBOARD mode")
+
+        if self.started and not self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
+            self.get_logger().info("Mission aborted")
+            exit(0)
 
         altitude_error = abs(self.vehicle_local_position.z - self.takeoff_altitude)
         vehicle_pos = np.array([self.vehicle_local_position.x , self.vehicle_local_position.y])
