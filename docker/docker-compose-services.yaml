@@ -1,0 +1,7 @@
+services:
+  # UXRCE agent service
+  urxce-agent:
+    image: antbre/uxrce_agent:latest
+    privileged: true
+    network_mode: 'host'
+    command: serial --dev /dev/ttyAMA0 -b 921600
