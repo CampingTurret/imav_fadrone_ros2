@@ -25,7 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
             'sim_servo = servo_control.sim_servo:main',
-            'real_servo = servo_control.real_servo:main'
+            'servo_test = servo_control.servo_test:main'
         ],
     },
 )

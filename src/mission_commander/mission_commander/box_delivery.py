@@ -24,7 +24,6 @@ class BoxDelivery(Node):
         self.trajectory_publisher = self.create_publisher(TrajectorySetpoint, '/fmu/in/trajectory_setpoint', qos_profile)
         self.vehicle_command_publisher = self.create_publisher(VehicleCommand, '/fmu/in/vehicle_command', qos_profile)
 
-        self.servo_position_publisher = self.create_publisher(Bool, '/servo_position', 10)
 
         # Create subscribers
         self.vehicle_local_position_subscriber = self.create_subscription(VehicleLocalPosition, '/fmu/out/vehicle_local_position', self.vehicle_local_position_callback, qos_profile)
@@ -39,7 +38,6 @@ class BoxDelivery(Node):
         self.started = False
         self.stage = 0
 
-        self.servo_msg = Bool(data=False)
         self.retract_servo()
         self.pos_hold_counter = 0
  
@@ -72,12 +70,12 @@ class BoxDelivery(Node):
         self.get_logger().info('Land command sent')
 
     def retract_servo(self):
-        self.servo_msg.data = False
-        self.servo_position_publisher.publish(self.servo_msg)
+        self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_ACTUATOR, -1.0)
+        self.get_logger().info("Retract servo")
 
     def extend_servo(self):
-        self.servo_msg.data = True
-        self.servo_position_publisher.publish(self.servo_msg)
+        self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_ACTUATOR, 1.0)
+        self.get_logger().info("Extend servo")
 
     def publish_vehicle_command(self, command, param1=0.0, param2=0.0):
         msg = VehicleCommand()
@@ -115,13 +113,6 @@ class BoxDelivery(Node):
     # Main loop: State Machine
     def timer_callback(self) -> None:
         self.publish_offboard_control_heartbeat_signal()
-
-        # Always publish position setpoint so OFFBOARD can be engaged
-        # if not self.started:
-        #     x = self.vehicle_local_position.x if np.isfinite(self.vehicle_local_position.x) else 0.0
-        #     y = self.vehicle_local_position.y if np.isfinite(self.vehicle_local_position.y) else 0.0
-        #     z = self.vehicle_local_position.z if np.isfinite(self.vehicle_local_position.z) else 0.0
-        #     self.publish_position_setpoint(x, y, z)
         
         # Stage 0: Arm and ready
         if not self.started and self.stage == 0 and self.offboard_setpoint_counter >= 10 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
