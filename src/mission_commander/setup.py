@@ -25,8 +25,8 @@ setup(
     entry_points={
         'console_scripts': [
             'takeoff_move_land = mission_commander.takeoff_move_land:main',
-            'takeoff_land = mission_commander.takeoff_land:main',
-            'box_delivery = mission_commander.box_delivery:main'
+            'box_delivery = mission_commander.box_delivery:main',
+            'gate_passing = mission_commander.gate_passing:main'
         ],
     },
 )
