@@ -3,12 +3,14 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
+import numpy as np
+from std_msgs.msg import Bool
 from px4_msgs.msg import OffboardControlMode, TrajectorySetpoint, VehicleCommand, VehicleLocalPosition, VehicleStatus
 import time
 
-class TakeoffMoveLand(Node):
+class BoxDelivery(Node):
     def __init__(self):
-        super().__init__('takeoff_move_land')
+        super().__init__('box_delivery')
 
         qos_profile = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -30,13 +32,25 @@ class TakeoffMoveLand(Node):
         self.offboard_setpoint_counter = 0
         self.vehicle_local_position = VehicleLocalPosition()
         self.vehicle_status = VehicleStatus()
-        self.takeoff_altitude = -2.0  # meters
-        self.move_distance = 2.0      # meters
- 
-        # Create timer
-        self.timer = self.create_timer(0.1, self.timer_callback)  # 10 Hz
+        self.takeoff_altitude = -1.5  # meters
         self.started = False
         self.stage = 0
+
+        # Generate waypoints
+        self.waypoints = [
+            [1.0, 1.0],
+            [0.0, 1.0],
+            [-1.0, 1.0],
+            [-1.0, 0.0],
+            [-1.0, -1.0],
+            [0.0, -1.0],
+            [1.0, -1.0],
+            [1.0, 0.0]
+        ]
+        self.waypoint_index = 0
+ 
+        # Create timer
+        self.timer = self.create_timer(0.1, self.timer_callback)  # 10 Hz   
         self.start_time = time.time()
 
     def vehicle_local_position_callback(self, vehicle_local_position):
@@ -55,10 +69,6 @@ class TakeoffMoveLand(Node):
         self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, 0.0)
         self.get_logger().info('Disarming command sent')
 
-    def set_offboard_mode(self):
-        self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1.0, 6.0)  # custom_mode=6 → OFFBOARD
-        self.get_logger().info('Set OFFBOARD mode command sent')
-
     def land(self):
         self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_LAND)
         self.get_logger().info('Land command sent')
@@ -76,8 +86,8 @@ class TakeoffMoveLand(Node):
         msg.from_external = True
         self.vehicle_command_publisher.publish(msg)
 
+    # Publish trajectory setpoint
     def publish_position_setpoint(self, x: float, y: float, z: float):
-        """Publish the trajectory setpoint."""
         msg = TrajectorySetpoint()
         msg.position = [x, y, z]
         msg.yaw = 0.0
@@ -85,8 +95,8 @@ class TakeoffMoveLand(Node):
         self.trajectory_publisher.publish(msg)
         self.get_logger().info(f"Publishing position setpoints {[x, y, z]}")
 
+    # Publish offboard control signal
     def publish_offboard_control_heartbeat_signal(self):
-        """Publish the offboard control heartbeat signal."""
         msg = OffboardControlMode()
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         msg.position = True
@@ -96,30 +106,66 @@ class TakeoffMoveLand(Node):
         msg.body_rate = False
         self.offboard_publisher.publish(msg)
 
-    # ---- Main loop ----
+    # Check if target reached
+    def target_reached(self, vehicle_pos_xy, target_pos_xy, tol=0.1):
+        if np.linalg.norm(vehicle_pos_xy - target_pos_xy) <= tol:
+            return True
+        else:
+            return False
+        
+    def altitude_reached(self, vehicle_alt, target_alt, tol=0.1):
+        if abs(vehicle_alt - target_alt) <= tol:
+            return True
+        else:
+            return False
+
+
+    # Main loop: State Machine
     def timer_callback(self) -> None:
         self.publish_offboard_control_heartbeat_signal()
-
-        if not self.started and self.offboard_setpoint_counter == 10:
-            self.set_offboard_mode()
+        
+        # Stage 0: Arm and ready
+        if not self.started and self.stage == 0 and self.offboard_setpoint_counter >= 10 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
+            # self.set_offboard_mode()
+            self.get_logger().info("Arming drone")
             self.arm()
             self.started = True
+            self.stage = 1
 
-        # Stage 0: Takeoff to z = −5.0 m
-        if self.started and self.vehicle_local_position.z > self.takeoff_altitude and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
+        elif not self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
+            self.get_logger().info("Waiting for OFFBOARD mode")
+
+        if self.started and not self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
+            self.get_logger().info("Mission aborted")
+            rclpy.shutdown()
+            return
+
+        vehicle_pos = np.array([self.vehicle_local_position.x , self.vehicle_local_position.y])
+
+        # Stage 1: Takeoff to z = −1.5 m
+        if self.started and self.stage == 1 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
             self.publish_position_setpoint(0.0, 0.0, self.takeoff_altitude)
+            if self.altitude_reached(self.vehicle_local_position.z, self.takeoff_altitude) and self.target_reached(vehicle_pos, np.array([0.0, 0.0])):
+                self.stage = 2
 
-        # Stage 1: Move forward 5 m in x
-        elif self.vehicle_local_position.z <= self.takeoff_altitude and self.vehicle_local_position.x < self.move_distance :
-            self.publish_position_setpoint(self.move_distance, 0.0, self.takeoff_altitude)
+        # Stage 2: Follow trajectory
+        elif self.started and self.stage == 2 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
+            target_pos = self.waypoints[self.waypoint_index]
+            self.publish_position_setpoint(target_pos[0], target_pos[1], self.takeoff_altitude)
 
+            if self.altitude_reached(self.vehicle_local_position.z, self.takeoff_altitude) and self.target_reached(vehicle_pos, target_pos):
+                self.waypoint_index += 1
 
-        # Stage 2: Land (descend) and disarm
-        elif self.vehicle_local_position.z <= self.takeoff_altitude and self.vehicle_local_position.x >= self.move_distance:
+                if self.waypoint_index >= len(self.waypoints):
+                    self.stage = 3
+        
+        # Stage 3: Land (descend) and disarm
+        elif self.stage == 3:
             self.land()
             self.disarm()
             self.get_logger().info('Mission complete')
-            exit(0)
+            rclpy.shutdown()
+            return
 
         if self.offboard_setpoint_counter < 11:
             self.offboard_setpoint_counter += 1
@@ -127,7 +173,7 @@ class TakeoffMoveLand(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = TakeoffMoveLand()
+    node = BoxDelivery()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()

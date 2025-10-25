@@ -94,6 +94,19 @@ class GatePassing(Node):
         msg.body_rate = False
         self.offboard_publisher.publish(msg)
 
+    # Check if target reached
+    def target_reached(self, vehicle_pos_xy, target_pos_xy, tol=0.1):
+        if np.linalg.norm(vehicle_pos_xy - target_pos_xy) <= tol:
+            return True
+        else:
+            return False
+        
+    def altitude_reached(self, vehicle_alt, target_alt, tol=0.1):
+        if abs(vehicle_alt - target_alt) <= tol:
+            return True
+        else:
+            return False
+
     # Main loop: State Machine
     def timer_callback(self) -> None:
         self.publish_offboard_control_heartbeat_signal()
@@ -109,28 +122,20 @@ class GatePassing(Node):
         elif not self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
             self.get_logger().info("Waiting for OFFBOARD mode")
 
-
+        vehicle_pos = np.array([self.vehicle_local_position.x , self.vehicle_local_position.y])
 
         # Stage 1: Takeoff to target altitude
         if self.started and self.stage == 1 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
             self.publish_position_setpoint(0.0, 0.0, self.takeoff_altitude)
 
-            altitude_error = abs(self.vehicle_local_position.z - self.takeoff_altitude)
-            vehicle_pos = np.array([self.vehicle_local_position.x , self.vehicle_local_position.y])
-            pos_error = np.linalg.norm(np.array([0.0, 0.0]) - vehicle_pos)
-
-            if altitude_error <= 0.10 and pos_error <= 0.07:
+            if self.altitude_reached(self.vehicle_local_position.z, self.takeoff_altitude) and self.target_reached(vehicle_pos, np.array([0.0, 0.0])):
                 self.stage = 2
 
         # Stage 2: Move forward slowly
         elif self.started and self.stage == 2 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
             self.publish_position_setpoint(self.target_pos[0], self.target_pos[1], self.takeoff_altitude)
 
-            altitude_error = abs(self.vehicle_local_position.z - self.takeoff_altitude)
-            vehicle_pos = np.array([self.vehicle_local_position.x , self.vehicle_local_position.y])
-            pos_error = np.linalg.norm(self.target_pos - vehicle_pos)
-
-            if altitude_error <= 0.10 and pos_error <= 0.07:
+            if self.altitude_reached(self.vehicle_local_position.z, self.takeoff_altitude) and self.target_reached(vehicle_pos, self.target_pos):
                 self.stage = 3
         
         # Stage 3: Land
@@ -138,12 +143,14 @@ class GatePassing(Node):
             self.land()
             self.disarm()
             self.get_logger().info('Mission complete')
-            exit(0)
+            rclpy.shutdown()
+            return
         
         # Abort mission, take over control
         if self.started and not self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
             self.get_logger().info("Mission aborted")
-            exit(0)
+            rclpy.shutdown()
+            return
 
         if self.offboard_setpoint_counter < 11:
             self.offboard_setpoint_counter += 1

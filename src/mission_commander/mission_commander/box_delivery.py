@@ -61,10 +61,6 @@ class BoxDelivery(Node):
         self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, 0.0)
         self.get_logger().info('Disarming command sent')
 
-    # def set_offboard_mode(self):
-    #     self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1.0, 6.0)  # custom_mode=6 -> OFFBOARD
-    #     self.get_logger().info('Set OFFBOARD mode command sent')
-
     def land(self):
         self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_LAND)
         self.get_logger().info('Land command sent')
@@ -90,8 +86,8 @@ class BoxDelivery(Node):
         msg.from_external = True
         self.vehicle_command_publisher.publish(msg)
 
+    # Publish trajectory setpoint
     def publish_position_setpoint(self, x: float, y: float, z: float):
-        """Publish the trajectory setpoint."""
         msg = TrajectorySetpoint()
         msg.position = [x, y, z]
         msg.yaw = 0.0
@@ -99,8 +95,8 @@ class BoxDelivery(Node):
         self.trajectory_publisher.publish(msg)
         self.get_logger().info(f"Publishing position setpoints {[x, y, z]}")
 
+    # Publish offboard control signal
     def publish_offboard_control_heartbeat_signal(self):
-        """Publish the offboard control heartbeat signal."""
         msg = OffboardControlMode()
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         msg.position = True
@@ -110,9 +106,29 @@ class BoxDelivery(Node):
         msg.body_rate = False
         self.offboard_publisher.publish(msg)
 
+    # Check if target reached
+    def target_reached(self, vehicle_pos_xy, target_pos_xy, tol=0.1):
+        if np.linalg.norm(vehicle_pos_xy - target_pos_xy) <= tol:
+            return True
+        else:
+            return False
+        
+    def altitude_reached(self, vehicle_alt, target_alt, tol=0.1):
+        if abs(vehicle_alt - target_alt) <= tol:
+            return True
+        else:
+            return False
+
+
     # Main loop: State Machine
     def timer_callback(self) -> None:
         self.publish_offboard_control_heartbeat_signal()
+        
+        # Abort mission, manual take over
+        if self.started and not self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
+            self.get_logger().info("Mission aborted")
+            rclpy.shutdown()
+            return
         
         # Stage 0: Arm and ready
         if not self.started and self.stage == 0 and self.offboard_setpoint_counter >= 10 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
@@ -126,33 +142,27 @@ class BoxDelivery(Node):
         elif not self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
             self.get_logger().info("Waiting for OFFBOARD mode")
 
-        if self.started and not self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
-            self.get_logger().info("Mission aborted")
-            exit(0)
-
-        altitude_error = abs(self.vehicle_local_position.z - self.takeoff_altitude)
         vehicle_pos = np.array([self.vehicle_local_position.x , self.vehicle_local_position.y])
-        pos_error = np.linalg.norm(self.target_pos - vehicle_pos)
 
-        # Stage 1: Takeoff to z = −5.0 m
+        # Stage 1: Takeoff to z = −1.5 m
         if self.started and self.stage == 1 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
             self.publish_position_setpoint(0.0, 0.0, self.takeoff_altitude)
             self.retract_servo()
-            if altitude_error <= 0.1:
+            if self.altitude_reached(self.vehicle_local_position.z, self.takeoff_altitude) and self.target_reached(vehicle_pos, np.array([0.0, 0.0])):
                 self.stage = 2
 
         # Stage 2: Move to target
         elif self.started and self.stage == 2 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
             self.publish_position_setpoint(self.target_pos[0], self.target_pos[1], self.takeoff_altitude)
             self.retract_servo()
-            if altitude_error <= 0.1 and pos_error <= 0.1:
+            if self.altitude_reached(self.vehicle_local_position.z, self.takeoff_altitude) and self.target_reached(vehicle_pos, self.target_pos):
                 self.stage = 3
         
         # Stage 3: Drop box
         elif self.started and self.stage == 3 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
             self.publish_position_setpoint(self.target_pos[0], self.target_pos[1], self.takeoff_altitude)
             self.extend_servo()
-            if altitude_error <= 0.1 and pos_error <= 0.1 and self.pos_hold_counter >= 30:
+            if self.altitude_reached(self.vehicle_local_position.z, self.takeoff_altitude) and self.target_reached(vehicle_pos, self.target_pos) and self.pos_hold_counter >= 30:
                 self.retract_servo()
                 self.stage = 4
                 self.target_pos = np.array([0.0, 0.0])
@@ -163,7 +173,7 @@ class BoxDelivery(Node):
         elif self.started and self.stage == 4 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
             self.publish_position_setpoint(self.target_pos[0], self.target_pos[1], self.takeoff_altitude)
             self.retract_servo()
-            if altitude_error <= 0.1 and pos_error <= 0.1:
+            if self.altitude_reached(self.vehicle_local_position.z, self.takeoff_altitude) and self.target_reached(vehicle_pos, self.target_pos):
                 self.stage = 5
 
         # Stage 5: Land (descend) and disarm
@@ -171,7 +181,8 @@ class BoxDelivery(Node):
             self.land()
             self.disarm()
             self.get_logger().info('Mission complete')
-            exit(0)
+            rclpy.shutdown()
+            return
 
         if self.offboard_setpoint_counter < 11:
             self.offboard_setpoint_counter += 1
