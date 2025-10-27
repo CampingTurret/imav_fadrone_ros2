@@ -3,14 +3,15 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
+from math import nan
 import numpy as np
 from std_msgs.msg import Bool
 from px4_msgs.msg import OffboardControlMode, TrajectorySetpoint, VehicleCommand, VehicleLocalPosition, VehicleStatus
 import time
 
-class PathFollowing(Node):
+class WhiteboardDrawing(Node):
     def __init__(self):
-        super().__init__('path_following')
+        super().__init__('whiteboard_drawing')
 
         qos_profile = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -27,26 +28,24 @@ class PathFollowing(Node):
         # Create subscribers
         self.vehicle_local_position_subscriber = self.create_subscription(VehicleLocalPosition, '/fmu/out/vehicle_local_position', self.vehicle_local_position_callback, qos_profile)
         self.vehicle_status_subscriber = self.create_subscription(VehicleStatus, '/fmu/out/vehicle_status', self.vehicle_status_callback, qos_profile)
+        self.marker_contact_subscriber = self.create_subscription(Bool, '/marker_detect', self.marker_detect_callback, 10)
 
         # Initialize variables
         self.offboard_setpoint_counter = 0
         self.vehicle_local_position = VehicleLocalPosition()
         self.vehicle_status = VehicleStatus()
+        self.marker_contact = False
         self.takeoff_altitude = -1.5  # meters
         self.started = False
         self.stage = 0
 
         # Generate waypoints
         self.waypoints = [
-            [1.0, 1.0],
-            [0.0, 1.0],
-            [-1.0, 1.0],
-            [-1.0, 0.0],
-            [-1.0, -1.0],
-            [0.0, -1.0],
-            [1.0, -1.0],
-            [1.0, 0.0]
+            [1.0, 0.0, 0.12, 0.0],
+            [1.0, 2.0, 0.01, 0.12],
+            [0.0, 2.0, -0.2, 0.0]
         ]
+
         self.waypoint_index = 0
  
         # Create timer
@@ -60,6 +59,10 @@ class PathFollowing(Node):
     def vehicle_status_callback(self, vehicle_status):
         """Callback function for vehicle_status topic subscriber."""
         self.vehicle_status = vehicle_status
+
+    def marker_detect_callback(self, marker_contact):
+        """Callback function for dectecting marker."""
+        self.marker_contact = marker_contact.data
     
     def arm(self):
         self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0)
@@ -87,20 +90,21 @@ class PathFollowing(Node):
         self.vehicle_command_publisher.publish(msg)
 
     # Publish trajectory setpoint
-    def publish_position_setpoint(self, x: float, y: float, z: float):
+    def publish_posvel_setpoint(self, x: float, y: float, z: float, vx: float, vy: float, vz: float):
         msg = TrajectorySetpoint()
         msg.position = [x, y, z]
+        msg.velocity = [vx, vy, vz]
         msg.yaw = 0.0
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         self.trajectory_publisher.publish(msg)
-        self.get_logger().info(f"Publishing position setpoints {[x, y, z]}")
+        self.get_logger().info(f"Publishing position setpoints {[x, y, z]} and velocity setpoints {[vx, vy, vz]}")
 
     # Publish offboard control signal
     def publish_offboard_control_heartbeat_signal(self):
         msg = OffboardControlMode()
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         msg.position = True
-        msg.velocity = False
+        msg.velocity = True
         msg.acceleration = False
         msg.attitude = False
         msg.body_rate = False
@@ -144,23 +148,40 @@ class PathFollowing(Node):
 
         # Stage 1: Takeoff to z = −1.5 m
         if self.started and self.stage == 1 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
-            self.publish_position_setpoint(0.0, 0.0, self.takeoff_altitude)
+            self.publish_posvel_setpoint(0.0, 0.0, self.takeoff_altitude, nan, nan, nan)
             if self.altitude_reached(self.vehicle_local_position.z, self.takeoff_altitude) and self.target_reached(vehicle_pos, np.array([0.0, 0.0])):
                 self.stage = 2
 
-        # Stage 2: Follow trajectory
+        # Stage 2: Move forward slowly
         elif self.started and self.stage == 2 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
-            target_pos = self.waypoints[self.waypoint_index]
-            self.publish_position_setpoint(target_pos[0], target_pos[1], self.takeoff_altitude)
+            target_posvel = self.waypoints[self.waypoint_index]
+            self.publish_posvel_setpoint(nan, nan, self.takeoff_altitude, target_posvel[2], target_posvel[3], nan)
 
-            if self.altitude_reached(self.vehicle_local_position.z, self.takeoff_altitude) and self.target_reached(vehicle_pos, target_pos):
+            if self.altitude_reached(self.vehicle_local_position.z, self.takeoff_altitude) and self.marker_contact:
+                self.next_position = np.array([self.vehicle_local_position.x, self.vehicle_local_position.y + 1.0])
                 self.waypoint_index += 1
+                self.stage = 3
 
-                if self.waypoint_index >= len(self.waypoints):
-                    self.stage = 3
+        # Stage 3: Move right slowly
+        elif self.started and self.stage == 3 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
+            target_posvel = self.waypoints[self.waypoint_index]
+
+            self.publish_posvel_setpoint(nan, nan, self.takeoff_altitude, target_posvel[2], target_posvel[3], nan)
+            if self.altitude_reached(self.vehicle_local_position.z, self.takeoff_altitude) and self.target_reached(vehicle_pos, self.next_position):
+                self.next_position = np.array([self.vehicle_local_position.x - 1.0, self.vehicle_local_position.y])
+                self.waypoint_index += 1
+                self.stage = 4
+
+        # Stage 4: Move back
+        elif self.started and self.stage == 4 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
+            self.publish_posvel_setpoint(self.next_position[0], self.next_position[1], self.takeoff_altitude, nan, nan, nan)
+
+            if self.altitude_reached(self.vehicle_local_position.z, self.takeoff_altitude) and self.target_reached(vehicle_pos, self.next_position):
+                self.stage = 5
+
         
-        # Stage 3: Land (descend) and disarm
-        elif self.stage == 3:
+        # Stage 5: Land (descend) and disarm
+        elif self.stage == 5:
             self.land()
             self.disarm()
             self.get_logger().info('Mission complete')
@@ -173,7 +194,7 @@ class PathFollowing(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = PathFollowing()
+    node = WhiteboardDrawing()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
