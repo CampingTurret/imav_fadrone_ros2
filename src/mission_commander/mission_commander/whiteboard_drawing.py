@@ -8,6 +8,7 @@ import numpy as np
 from std_msgs.msg import Bool
 from px4_msgs.msg import OffboardControlMode, TrajectorySetpoint, VehicleCommand, VehicleLocalPosition, VehicleStatus
 import time
+from gpiozero import Button
 
 class WhiteboardDrawing(Node):
     def __init__(self):
@@ -28,13 +29,12 @@ class WhiteboardDrawing(Node):
         # Create subscribers
         self.vehicle_local_position_subscriber = self.create_subscription(VehicleLocalPosition, '/fmu/out/vehicle_local_position', self.vehicle_local_position_callback, qos_profile)
         self.vehicle_status_subscriber = self.create_subscription(VehicleStatus, '/fmu/out/vehicle_status', self.vehicle_status_callback, qos_profile)
-        self.marker_contact_subscriber = self.create_subscription(Bool, '/marker_detect', self.marker_detect_callback, 10)
 
         # Initialize variables
         self.offboard_setpoint_counter = 0
         self.vehicle_local_position = VehicleLocalPosition()
         self.vehicle_status = VehicleStatus()
-        self.marker_contact = False
+        self.marker = Button(17)
         self.takeoff_altitude = -1.5  # meters
         self.started = False
         self.stage = 0
@@ -42,7 +42,7 @@ class WhiteboardDrawing(Node):
         # Generate waypoints
         self.waypoints = [
             [1.0, 0.0, 0.12, 0.0],
-            [1.0, 2.0, 0.01, 0.12],
+            [1.0, 2.0, 0.08, 0.12],
             [0.0, 2.0, -0.2, 0.0]
         ]
 
@@ -59,10 +59,6 @@ class WhiteboardDrawing(Node):
     def vehicle_status_callback(self, vehicle_status):
         """Callback function for vehicle_status topic subscriber."""
         self.vehicle_status = vehicle_status
-
-    def marker_detect_callback(self, marker_contact):
-        """Callback function for dectecting marker."""
-        self.marker_contact = marker_contact.data
     
     def arm(self):
         self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0)
@@ -156,8 +152,9 @@ class WhiteboardDrawing(Node):
         elif self.started and self.stage == 2 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
             target_posvel = self.waypoints[self.waypoint_index]
             self.publish_posvel_setpoint(nan, nan, self.takeoff_altitude, target_posvel[2], target_posvel[3], nan)
+            self.get_logger().info("Marker not pressed")
 
-            if self.altitude_reached(self.vehicle_local_position.z, self.takeoff_altitude) and self.marker_contact:
+            if self.marker.is_pressed:
                 self.next_position = np.array([self.vehicle_local_position.x, self.vehicle_local_position.y + 1.0])
                 self.waypoint_index += 1
                 self.stage = 3
@@ -166,7 +163,12 @@ class WhiteboardDrawing(Node):
         elif self.started and self.stage == 3 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
             target_posvel = self.waypoints[self.waypoint_index]
 
-            self.publish_posvel_setpoint(nan, nan, self.takeoff_altitude, target_posvel[2], target_posvel[3], nan)
+            if self.marker.is_pressed:
+                x_vel = 0.07
+            else:
+                x_vel = 0.1
+
+            self.publish_posvel_setpoint(nan, nan, self.takeoff_altitude, x_vel, target_posvel[3], nan)
             if self.altitude_reached(self.vehicle_local_position.z, self.takeoff_altitude) and self.target_reached(vehicle_pos, self.next_position):
                 self.next_position = np.array([self.vehicle_local_position.x - 1.0, self.vehicle_local_position.y])
                 self.waypoint_index += 1

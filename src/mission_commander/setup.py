@@ -27,8 +27,7 @@ setup(
             'box_delivery = mission_commander.box_delivery:main',
             'gate_passing = mission_commander.gate_passing:main',
             'path_following = mission_commander.path_following:main',
-            'whiteboard_drawing = mission_commander.whiteboard_drawing:main',
-            'marker_detect = mission_commander.marker_detect:main'
+            'whiteboard_drawing = mission_commander.whiteboard_drawing:main'
         ],
     },
 )

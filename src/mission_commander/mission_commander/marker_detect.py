@@ -10,22 +10,21 @@ class MarkerDetect(Node):
         super().__init__('marker_detect')
 
         # Create publisher
-        self.marker_publisher = self.create_publisher(Bool, '/marker_detect', 10)
+        self.marker_publisher = self.create_publisher(Bool, '/marker_topic', 10)
 
         # Initialize variables
         self.marker = Button(17)
+        self.marker_msg = Bool(data=False)
 
         # Create timer
         self.timer = self.create_timer(0.1, self.timer_callback)  # 10 Hz   
 
-    def publish_marker_data(self, marker):
-        marker_msg = Bool()
-        marker_msg.data = marker.is_pressed
-        self.marker_publisher.publish(marker_msg)
-        self.get_logger().info(f"Contacted? {marker.is_pressed}")
 
     def timer_callback(self):
-        self.publish_marker_data(self.marker)
+        self.marker_msg.data = self.marker.is_pressed
+        self.marker_msg.data = True
+        self.marker_publisher.publish(self.marker_msg)
+        self.get_logger().info(f'Publishing {self.marker_msg.data}')
 
 def main(args=None):
     rclpy.init(args=args)
