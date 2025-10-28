@@ -41,8 +41,8 @@ class WhiteboardDrawing(Node):
 
         # Generate waypoints
         self.waypoints = [
-            [1.0, 0.0, 0.12, 0.0],
-            [1.0, 2.0, 0.08, 0.12],
+            [1.0, 0.0, 0.1, 0.0],
+            [1.0, 2.0, 0.05, 0.10],
             [0.0, 2.0, -0.2, 0.0]
         ]
 
