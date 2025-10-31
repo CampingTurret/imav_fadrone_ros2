@@ -41,9 +41,9 @@ class WhiteboardDrawing(Node):
 
         # Generate waypoints
         self.waypoints = [
-            [1.0, 0.0, 0.1, 0.0],
-            [1.0, 2.0, 0.05, 0.10],
-            [0.0, 2.0, -0.2, 0.0]
+            [1.0, 0.0, 0.08, 0.0],  # Approach whiteboard
+            [1.0, 2.0, 0.08, 0.10], # Draw line
+            [0.0, 2.0, -0.2, 0.0] # Move back
         ]
 
         self.waypoint_index = 0
@@ -163,13 +163,8 @@ class WhiteboardDrawing(Node):
         elif self.started and self.stage == 3 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
             target_posvel = self.waypoints[self.waypoint_index]
 
-            if self.marker.is_pressed:
-                x_vel = 0.07
-            else:
-                x_vel = 0.1
-
-            self.publish_posvel_setpoint(nan, nan, self.takeoff_altitude, x_vel, target_posvel[3], nan)
-            if self.altitude_reached(self.vehicle_local_position.z, self.takeoff_altitude) and self.target_reached(vehicle_pos, self.next_position):
+            self.publish_posvel_setpoint(nan, nan, self.takeoff_altitude, target_posvel[2], target_posvel[3], nan)
+            if self.altitude_reached(self.vehicle_local_position.z, self.takeoff_altitude) and self.target_reached(vehicle_pos, self.next_position, tol=0.15):
                 self.next_position = np.array([self.vehicle_local_position.x - 1.0, self.vehicle_local_position.y])
                 self.waypoint_index += 1
                 self.stage = 4
@@ -178,7 +173,7 @@ class WhiteboardDrawing(Node):
         elif self.started and self.stage == 4 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
             self.publish_posvel_setpoint(self.next_position[0], self.next_position[1], self.takeoff_altitude, nan, nan, nan)
 
-            if self.altitude_reached(self.vehicle_local_position.z, self.takeoff_altitude) and self.target_reached(vehicle_pos, self.next_position):
+            if self.altitude_reached(self.vehicle_local_position.z, self.takeoff_altitude) and self.target_reached(vehicle_pos, self.next_position, tol=0.15):
                 self.stage = 5
 
         
