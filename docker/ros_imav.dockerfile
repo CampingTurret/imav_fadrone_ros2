@@ -11,9 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install python packages
-RUN pip3 install numpy 
-RUN pip3 install lgpio
-RUN pip3 install gpiozero
+RUN pip3 install numpy lgpio gpiozero
 
 # Setup workspace
 WORKDIR /home/user/imav_ws
