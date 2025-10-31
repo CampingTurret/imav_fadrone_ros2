@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install python packages
-RUN pip3 install numpy
+RUN pip3 install numpy 
 RUN pip3 install lgpio
 RUN pip3 install gpiozero
 
@@ -20,7 +20,7 @@ WORKDIR /home/user/imav_ws
 RUN mkdir -p src
 
 # Clone px4_msg
-RUN git clone https://github.com/elijahanghw/px4_msgs_minimal.git /home/user/imav_ws/src/px4_msg
+# RUN git clone https://github.com/elijahanghw/px4_msgs_minimal.git /home/user/imav_ws/src/px4_msg
 
 # Copy local workspace
 COPY ./src /home/user/imav_ws/src
