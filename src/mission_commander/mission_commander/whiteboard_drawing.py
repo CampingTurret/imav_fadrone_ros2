@@ -6,7 +6,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPo
 from math import nan
 import numpy as np
 from std_msgs.msg import Bool
-from px4_msgs.msg import OffboardControlMode, TrajectorySetpoint, VehicleCommand, VehicleLocalPosition, VehicleStatus
+from px4_msgs.msg import OffboardControlMode, TrajectorySetpoint, VehicleCommand, VehicleLocalPosition, VehicleStatus, VehicleAttitude
 import time
 from gpiozero import Button
 
@@ -29,25 +29,45 @@ class WhiteboardDrawing(Node):
         # Create subscribers
         self.vehicle_local_position_subscriber = self.create_subscription(VehicleLocalPosition, '/fmu/out/vehicle_local_position', self.vehicle_local_position_callback, qos_profile)
         self.vehicle_status_subscriber = self.create_subscription(VehicleStatus, '/fmu/out/vehicle_status', self.vehicle_status_callback, qos_profile)
+        self.vehicle_yaw_subscriber = self.create_subscription(VehicleAttitude, '/fmu/out/vehicle_attitude', self.vehicle_attitude_callback, qos_profile)
 
         # Initialize variables
         self.offboard_setpoint_counter = 0
         self.vehicle_local_position = VehicleLocalPosition()
         self.vehicle_status = VehicleStatus()
+        self.vehicle_attitude = VehicleAttitude()
         self.marker = Button(17)
         self.takeoff_altitude = -1.5  # meters
         self.started = False
         self.stage = 0
 
-        # Generate waypoints
+        # Generate waypoints (x, y, yaw, vx, vy)
         self.waypoints = [
-            [1.0, 0.0, 0.08, 0.0],  # Approach whiteboard
-            [1.0, 2.0, 0.08, 0.10], # Draw line
-            [0.0, 2.0, -0.2, 0.0] # Move back
+            [1.0, 1.0, 0.0, nan, nan],
+            [1.0, 1.0, np.pi, nan, nan],
+            [0.0, 1.0, np.pi, nan, nan],
+            [-1.0, 1.0, np.pi, nan, nan],
+            [-1.0, 1.0, -np.pi/2, nan, nan],
+            [-1.0, 0.0, -np.pi/2, nan, nan],
+            [-1.0, -1.0, -np.pi/2, nan, nan],
+            [-1.0, -1.0, 0.0, nan, nan],
+            [0.0, -1.0, 0.0, nan, nan],
+            [1.0, -1.0, 0.0, nan, nan],
+            [1.0, -1.0, np.pi/2, nan, nan],
+            [1.0, 0.0, np.pi/2, nan, nan],
         ]
-
         self.waypoint_index = 0
- 
+
+        # Generate approach
+        self.approach = [
+            # Approach whiteboard
+            [nan, nan, np.pi/2, 0.08, 0.0],
+            [nan, nan, np.pi/2, 0.08, 0.1],
+            # Move back
+            [1.0, 0.0, np.pi/2, nan, nan]
+        ]
+        self.approach_index = 0
+
         # Create timer
         self.timer = self.create_timer(0.1, self.timer_callback)  # 10 Hz   
         self.start_time = time.time()
@@ -59,6 +79,10 @@ class WhiteboardDrawing(Node):
     def vehicle_status_callback(self, vehicle_status):
         """Callback function for vehicle_status topic subscriber."""
         self.vehicle_status = vehicle_status
+
+    def vehicle_attitude_callback(self, vehicle_attitude):
+        """Callback function for vehicle_status topic subscriber."""
+        self.vehicle_attitude = vehicle_attitude
     
     def arm(self):
         self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0)
@@ -67,6 +91,10 @@ class WhiteboardDrawing(Node):
     def disarm(self):
         self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, 0.0)
         self.get_logger().info('Disarming command sent')
+
+    def set_offboard_mode(self):
+        self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1.0, 6.0)
+        self.get_logger().info('Set OFFBOARD mode command sent')
 
     def land(self):
         self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_LAND)
@@ -86,14 +114,14 @@ class WhiteboardDrawing(Node):
         self.vehicle_command_publisher.publish(msg)
 
     # Publish trajectory setpoint
-    def publish_posvel_setpoint(self, x: float, y: float, z: float, vx: float, vy: float, vz: float):
+    def publish_posvel_setpoint(self, x: float, y: float, z: float, yaw: float, vx: float, vy: float):
         msg = TrajectorySetpoint()
         msg.position = [x, y, z]
-        msg.velocity = [vx, vy, vz]
-        msg.yaw = 0.0
+        msg.velocity = [vx, vy, nan]
+        msg.yaw = yaw
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         self.trajectory_publisher.publish(msg)
-        self.get_logger().info(f"Publishing position setpoints {[x, y, z]} and velocity setpoints {[vx, vy, vz]}")
+        self.get_logger().info(f"Publishing position setpoints {[x, y, z]}, yaw commands {[yaw]}, and velocity setpoints {[vx, vy]}")
 
     # Publish offboard control signal
     def publish_offboard_control_heartbeat_signal(self):
@@ -118,6 +146,15 @@ class WhiteboardDrawing(Node):
             return True
         else:
             return False
+        
+    def yaw_reached(self, vehicle_q, target_yaw, tol=0.08):
+        w, x, y, z = vehicle_q
+        vehicle_yaw = np.arctan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y**2 + z**2))
+
+        if abs(vehicle_yaw - target_yaw) <= tol:
+            return True
+        else:
+            return False
 
 
     # Main loop: State Machine
@@ -125,60 +162,72 @@ class WhiteboardDrawing(Node):
         self.publish_offboard_control_heartbeat_signal()
         
         # Stage 0: Arm and ready
-        if not self.started and self.stage == 0 and self.offboard_setpoint_counter >= 10 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
-            # self.set_offboard_mode()
+        if not self.started and self.stage == 0 and self.offboard_setpoint_counter >= 10:
+            self.set_offboard_mode()
             self.get_logger().info("Arming drone")
             self.arm()
             self.started = True
             self.stage = 1
 
-        elif not self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
-            self.get_logger().info("Waiting for OFFBOARD mode")
+        # elif not self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
+        #     self.get_logger().info("Waiting for OFFBOARD mode")
 
-        if self.started and not self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
-            self.get_logger().info("Mission aborted")
-            rclpy.shutdown()
-            return
+        # if self.started and not self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
+        #     self.get_logger().info("Mission aborted")
+        #     rclpy.shutdown()
+        #     return
 
         vehicle_pos = np.array([self.vehicle_local_position.x , self.vehicle_local_position.y])
+        vehicle_q = self.vehicle_attitude.q
 
         # Stage 1: Takeoff to z = −1.5 m
-        if self.started and self.stage == 1 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
-            self.publish_posvel_setpoint(0.0, 0.0, self.takeoff_altitude, nan, nan, nan)
+        if self.started and self.stage == 1:
+            self.publish_posvel_setpoint(0.0, 0.0, self.takeoff_altitude, 0.0, nan, nan)
             if self.altitude_reached(self.vehicle_local_position.z, self.takeoff_altitude) and self.target_reached(vehicle_pos, np.array([0.0, 0.0])):
                 self.stage = 2
 
-        # Stage 2: Move forward slowly
-        elif self.started and self.stage == 2 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
-            target_posvel = self.waypoints[self.waypoint_index]
-            self.publish_posvel_setpoint(nan, nan, self.takeoff_altitude, target_posvel[2], target_posvel[3], nan)
+        # Stage 2: Follow trajectory
+        elif self.started and self.stage == 2:
+            target_pos = self.waypoints[self.waypoint_index]
+            self.publish_posvel_setpoint(target_pos[0], target_pos[1], self.takeoff_altitude, target_pos[2], target_pos[3], target_pos[4])
+
+            if self.altitude_reached(self.vehicle_local_position.z, self.takeoff_altitude) and self.target_reached(vehicle_pos, target_pos[0:2], tol=0.15) and self.yaw_reached(vehicle_q, target_pos[2]):
+                self.waypoint_index += 1
+
+                if self.waypoint_index >= len(self.waypoints):
+                    self.stage = 3
+
+        # Stage 3: Move forward slowly
+        elif self.started and self.stage == 3:
+            target_posvel = self.approach[self.approach_index]
+            self.publish_posvel_setpoint(nan, nan, self.takeoff_altitude, target_posvel[2], target_posvel[3], target_posvel[4])
             self.get_logger().info("Marker not pressed")
 
             if self.marker.is_pressed:
                 self.next_position = np.array([self.vehicle_local_position.x, self.vehicle_local_position.y + 1.0])
-                self.waypoint_index += 1
-                self.stage = 3
-
-        # Stage 3: Move right slowly
-        elif self.started and self.stage == 3 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
-            target_posvel = self.waypoints[self.waypoint_index]
-
-            self.publish_posvel_setpoint(nan, nan, self.takeoff_altitude, target_posvel[2], target_posvel[3], nan)
-            if self.altitude_reached(self.vehicle_local_position.z, self.takeoff_altitude) and self.target_reached(vehicle_pos, self.next_position, tol=0.15):
-                self.next_position = np.array([self.vehicle_local_position.x - 1.0, self.vehicle_local_position.y])
-                self.waypoint_index += 1
+                self.approach_index += 1
                 self.stage = 4
 
-        # Stage 4: Move back
-        elif self.started and self.stage == 4 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
-            self.publish_posvel_setpoint(self.next_position[0], self.next_position[1], self.takeoff_altitude, nan, nan, nan)
+        # Stage 4: Move right slowly
+        elif self.started and self.stage == 4:
+            target_posvel = self.approach[self.approach_index]
 
+            self.publish_posvel_setpoint(nan, nan, self.takeoff_altitude, target_posvel[2], target_posvel[3], target_posvel[4])
             if self.altitude_reached(self.vehicle_local_position.z, self.takeoff_altitude) and self.target_reached(vehicle_pos, self.next_position, tol=0.15):
+                self.approach_index += 1
                 self.stage = 5
 
+        # Stage 5: Move back
+        elif self.started and self.stage == 5:
+            target_posvel = self.approach[self.approach_index]
+            self.publish_posvel_setpoint(target_posvel[0], target_posvel[1], self.takeoff_altitude, target_posvel[2], target_posvel[3], target_posvel[4])
+
+            if self.altitude_reached(self.vehicle_local_position.z, self.takeoff_altitude) and self.target_reached(vehicle_pos, target_pos[0:2], tol=0.2):
+                self.stage = 6
+
         
-        # Stage 5: Land (descend) and disarm
-        elif self.stage == 5:
+        # Stage 6: Land (descend) and disarm
+        elif self.stage == 6:
             self.land()
             self.disarm()
             self.get_logger().info('Mission complete')
