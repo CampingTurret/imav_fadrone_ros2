@@ -43,28 +43,23 @@ class WhiteboardDrawing(Node):
 
         # Generate waypoints (x, y, yaw, vx, vy)
         self.waypoints = [
-            [1.0, 1.0, 0.0, nan, nan],
-            [1.0, 1.0, np.pi, nan, nan],
-            [0.0, 1.0, np.pi, nan, nan],
-            [-1.0, 1.0, np.pi, nan, nan],
-            [-1.0, 1.0, -np.pi/2, nan, nan],
-            [-1.0, 0.0, -np.pi/2, nan, nan],
-            [-1.0, -1.0, -np.pi/2, nan, nan],
-            [-1.0, -1.0, 0.0, nan, nan],
-            [0.0, -1.0, 0.0, nan, nan],
-            [1.0, -1.0, 0.0, nan, nan],
-            [1.0, -1.0, np.pi/2, nan, nan],
-            [1.0, 0.0, np.pi/2, nan, nan],
+            [0.0, 2.0, 0.0, nan, nan],
+            [0.0, 4.0, 0.0, nan, nan],
+            [0.0, 5.0, 0.0, nan, nan],
+            [2.0, 5.0, 0.0, nan, nan],
+            [4.0, 5.0, 0.0, nan, nan],
+            [5.0, 5.0, 0.0, nan, nan],
+            [5.0, 5.0, np.pi/2, nan, nan],
         ]
         self.waypoint_index = 0
 
         # Generate approach
         self.approach = [
             # Approach whiteboard
-            [nan, nan, np.pi/2, 0.08, 0.0],
-            [nan, nan, np.pi/2, 0.08, 0.1],
+            [nan, nan, np.pi/2, 0.0, 0.08],
+            [nan, nan, np.pi/2, -0.1, 0.08],
             # Move back
-            [1.0, 0.0, np.pi/2, nan, nan]
+            [5.0, 5.0, np.pi/2, nan, nan]
         ]
         self.approach_index = 0
 
@@ -204,16 +199,16 @@ class WhiteboardDrawing(Node):
             self.get_logger().info("Marker not pressed")
 
             if self.marker.is_pressed:
-                self.next_position = np.array([self.vehicle_local_position.x, self.vehicle_local_position.y + 1.0])
+                self.next_position = np.array([self.vehicle_local_position.x - 1.2, self.vehicle_local_position.y])
                 self.approach_index += 1
                 self.stage = 4
 
         # Stage 4: Move right slowly
         elif self.started and self.stage == 4:
             target_posvel = self.approach[self.approach_index]
-
             self.publish_posvel_setpoint(nan, nan, self.takeoff_altitude, target_posvel[2], target_posvel[3], target_posvel[4])
-            if self.altitude_reached(self.vehicle_local_position.z, self.takeoff_altitude) and self.target_reached(vehicle_pos, self.next_position, tol=0.15):
+
+            if self.altitude_reached(self.vehicle_local_position.z, self.takeoff_altitude) and self.target_reached(vehicle_pos[0], self.next_position[0], tol=0.15):
                 self.approach_index += 1
                 self.stage = 5
 
@@ -222,7 +217,7 @@ class WhiteboardDrawing(Node):
             target_posvel = self.approach[self.approach_index]
             self.publish_posvel_setpoint(target_posvel[0], target_posvel[1], self.takeoff_altitude, target_posvel[2], target_posvel[3], target_posvel[4])
 
-            if self.altitude_reached(self.vehicle_local_position.z, self.takeoff_altitude) and self.target_reached(vehicle_pos, target_pos[0:2], tol=0.2):
+            if self.altitude_reached(self.vehicle_local_position.z, self.takeoff_altitude) and self.target_reached(vehicle_pos, target_posvel[0:2], tol=0.2):
                 self.stage = 6
 
         
