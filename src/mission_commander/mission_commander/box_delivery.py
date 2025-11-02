@@ -160,13 +160,13 @@ class BoxDelivery(Node):
         self.publish_offboard_control_heartbeat_signal()
         
         # Abort mission, manual take over
-        # if self.started and not self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
-        #     self.get_logger().info("Mission aborted")
-        #     rclpy.shutdown()
-        #     return
+        if self.started and not self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
+            self.get_logger().info("Mission aborted")
+            rclpy.shutdown()
+            return
         
         # Stage 0: Arm and ready
-        if not self.started and self.stage == 0 and self.offboard_setpoint_counter >= 10 :
+        if not self.started and self.stage == 0 and self.offboard_setpoint_counter >= 10 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
             self.set_offboard_mode()
             self.get_logger().info("Arming drone")
             self.arm()
@@ -174,21 +174,21 @@ class BoxDelivery(Node):
             self.stage = 1
             self.retract_servo()
 
-        # elif not self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
-        #     self.get_logger().info("Waiting for OFFBOARD mode")
+        elif not self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
+            self.get_logger().info("Waiting for OFFBOARD mode")
 
         vehicle_pos = np.array([self.vehicle_local_position.x , self.vehicle_local_position.y])
         vehicle_q = self.vehicle_attitude.q
 
         # Stage 1: Takeoff to z = −1.5 m
-        if self.started and self.stage == 1:
+        if self.started and self.stage == 1 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
             self.publish_position_setpoint(0.0, 0.0, self.takeoff_altitude, 0.0)
             self.retract_servo()
             if self.altitude_reached(self.vehicle_local_position.z, self.takeoff_altitude) and self.target_reached(vehicle_pos, np.array([0.0, 0.0])):
                 self.stage = 2
 
         # Stage 2: Follow trajectory to target
-        elif self.started and self.stage == 2:
+        elif self.started and self.stage == 2 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
             target_pos = self.waypoints[self.waypoint_index]
             self.publish_position_setpoint(target_pos[0], target_pos[1], self.takeoff_altitude, target_pos[2])
             self.retract_servo()
@@ -200,7 +200,7 @@ class BoxDelivery(Node):
                     self.stage = 3
         
         # Stage 3: Drop box
-        elif self.started and self.stage == 3:
+        elif self.started and self.stage == 3 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
             target_pos = self.waypoints[-1]
             self.publish_position_setpoint(target_pos[0], target_pos[1], self.takeoff_altitude, target_pos[2])
             self.extend_servo()
@@ -211,7 +211,7 @@ class BoxDelivery(Node):
                 self.pos_hold_counter += 1
 
         # Stage 4: Return home
-        elif self.started and self.stage == 4:
+        elif self.started and self.stage == 4 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
             target_pos = np.array([0.0, 0.0, 0.0])
             self.publish_position_setpoint(target_pos[0], target_pos[1], self.takeoff_altitude, target_pos[2])
             self.retract_servo()
