@@ -83,9 +83,9 @@ class BoxDelivery(Node):
         self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, 0.0)
         self.get_logger().info('Disarming command sent')
 
-    def set_offboard_mode(self):
-        self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1.0, 6.0)
-        self.get_logger().info('Set OFFBOARD mode command sent')
+    # def set_offboard_mode(self):
+    #     self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1.0, 6.0)
+    #     self.get_logger().info('Set OFFBOARD mode command sent')
 
     def land(self):
         self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_LAND)
@@ -167,7 +167,7 @@ class BoxDelivery(Node):
         
         # Stage 0: Arm and ready
         if not self.started and self.stage == 0 and self.offboard_setpoint_counter >= 10 and self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
-            self.set_offboard_mode()
+            # self.set_offboard_mode()
             self.get_logger().info("Arming drone")
             self.arm()
             self.started = True
