@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install python packages
-RUN pip3 install numpy lgpio gpiozero
+# RUN pip3 install numpy lgpio gpiozero
 
 # Setup workspace
 WORKDIR /home/user/imav_ws
@@ -20,13 +20,16 @@ RUN mkdir -p src
 # Clone px4_msg
 # RUN git clone https://github.com/elijahanghw/px4_msgs_minimal.git /home/user/imav_ws/src/px4_msg
 
+COPY ./src/px4_msgs src/px4_msgs
+RUN bash -c "source /opt/ros/humble/setup.bash && colcon build --packages-select px4_msgs"
+
 # Copy local workspace
 COPY ./src /home/user/imav_ws/src
 
 # Build the workspace
 RUN bash -c "source /opt/ros/humble/setup.bash && \
             cd /home/user/imav_ws && \
-            colcon build"
+            colcon build --packages-skip px4_msgs"
 
 # Source workspace when container starts
 RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> ~/.bashrc && \

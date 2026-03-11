@@ -66,6 +66,7 @@ class BoxDelivery(Node):
     def vehicle_local_position_callback(self, vehicle_local_position):
         """Callback function for vehicle_local_position topic subscriber."""
         self.vehicle_local_position = vehicle_local_position
+        # self.get_logger().info(f"Got position: {vehicle_local_position.x}, {vehicle_local_position.y}, {vehicle_local_position.z}")
 
     def vehicle_status_callback(self, vehicle_status):
         """Callback function for vehicle_status topic subscriber."""
