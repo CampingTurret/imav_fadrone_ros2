@@ -111,6 +111,7 @@ class MinimalStepInput(Node):
         # --- Stage 1: takeoff (simple thrust hold) ---
         elif self.stage == 1:
             self.send_attitude_setpoint(0.0, 0.0, 0.0, 0.65)
+            print(self.local_pos.z)
             if self.local_pos.z < -1.0:  # reached -1 m altitude
                 self.stage = 2
                 self.start_time = time.time()
