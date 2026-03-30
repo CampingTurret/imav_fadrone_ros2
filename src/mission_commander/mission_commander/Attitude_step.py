@@ -52,27 +52,20 @@ class MinimalStepInput(Node):
     # ------------------------------------------------------------
     # Helper: send attitude + thrust setpoint
     # ------------------------------------------------------------
-    def send_attitude(self, roll, pitch, yaw, thrust):
+    def send_attitude_setpoint(self, roll, pitch, yaw_rate, thrust):
         msg = VehicleAttitudeSetpoint()
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
 
-        # Euler → quaternion
-        cy = np.cos(yaw * 0.5)
-        sy = np.sin(yaw * 0.5)
-        cp = np.cos(pitch * 0.5)
-        sp = np.sin(pitch * 0.5)
-        cr = np.cos(roll * 0.5)
-        sr = np.sin(roll * 0.5)
+        # Euler angle commands
+        msg.roll_body = roll
+        msg.pitch_body = pitch
+        msg.yaw_sp_move_rate = yaw_rate
 
-        msg.q_d = [
-            cr * cp * cy + sr * sp * sy,
-            sr * cp * cy - cr * sp * sy,
-            cr * sp * cy + sr * cp * sy,
-            cr * cp * sy - sr * sp * cy
-        ]
+        # Thrust in body NED frame (down is positive)
+        msg.thrust_body = [0.0, 0.0, -thrust]
 
-        msg.thrust = thrust
         self.attitude_pub.publish(msg)
+
 
     # ------------------------------------------------------------
     # Helper: offboard heartbeat
