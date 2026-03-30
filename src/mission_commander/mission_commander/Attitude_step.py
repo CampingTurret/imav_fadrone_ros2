@@ -21,16 +21,23 @@ class MinimalStepInput(Node):
     def __init__(self):
         super().__init__('minimal_step_input')
 
+        qos_profile = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1,
+        )
+
         # --- Publishers ---
-        self.offboard_pub = self.create_publisher(OffboardControlMode, '/fmu/in/offboard_control_mode')
+        self.offboard_pub = self.create_publisher(OffboardControlMode, '/fmu/in/offboard_control_mode', qos_profile)
 
-        self.attitude_pub = self.create_publisher(VehicleAttitudeSetpoint,'/fmu/in/vehicle_attitude_setpoint')
+        self.attitude_pub = self.create_publisher(VehicleAttitudeSetpoint,'/fmu/in/vehicle_attitude_setpoint', qos_profile)
 
-        self.command_pub = self.create_publisher(VehicleCommand,'/fmu/in/vehicle_command')
+        self.command_pub = self.create_publisher(VehicleCommand,'/fmu/in/vehicle_command', qos_profile)
 
         # --- Subscribers ---
         self.local_pos = VehicleLocalPosition()
-        self.create_subscription(VehicleLocalPosition, '/fmu/out/vehicle_local_position', self.position_callback)
+        self.create_subscription(VehicleLocalPosition, '/fmu/out/vehicle_local_position', self.position_callback, qos_profile)
 
         # --- State ---
         self.stage = 0
