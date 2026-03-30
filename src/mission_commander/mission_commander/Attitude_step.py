@@ -101,7 +101,7 @@ class MinimalStepInput(Node):
 
         # --- Stage 0: send a few setpoints before switching to offboard ---
         if self.stage == 0:
-            self.send_attitude_setpoint(0.0, 0.0, 0.0, 0.6)
+            self.send_attitude_setpoint(0.0, 0.0, 0.0, 0)
             if time.time() - self.start_time > 1.0:
                 self.command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1.0, 6.0)  # OFFBOARD
                 self.command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0)
@@ -110,7 +110,7 @@ class MinimalStepInput(Node):
 
         # --- Stage 1: takeoff (simple thrust hold) ---
         elif self.stage == 1:
-            self.send_attitude_setpoint(0.0, 0.0, 0.0, 0.65)
+            self.send_attitude_setpoint(0.0, 0.0, 0.0, 0.1)
             print(self.local_pos.z)
             if self.local_pos.z < -1.0:  # reached -1 m altitude
                 self.stage = 2
@@ -120,7 +120,7 @@ class MinimalStepInput(Node):
         elif self.stage == 2:
             # Example: 10° roll step
             roll_step = np.deg2rad(10)
-            self.send_attitude_setpoint(roll_step, 0.0, 0.0, 0.6)
+            self.send_attitude_setpoint(roll_step, 0.0, 0.0, 0.1)
 
             if time.time() - self.start_time > 3.0:
                 self.stage = 3
