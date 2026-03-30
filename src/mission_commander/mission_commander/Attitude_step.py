@@ -103,8 +103,8 @@ class MinimalStepInput(Node):
         if self.stage == 0:
             self.send_attitude_setpoint(0.0, 0.0, 0.0, 0.6)
             if time.time() - self.start_time > 1.0:
-                self.command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1, 6)  # OFFBOARD
-                self.command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, 1)
+                self.command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1.0, 6.0)  # OFFBOARD
+                self.command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0)
                 self.stage = 1
                 self.start_time = time.time()
 
