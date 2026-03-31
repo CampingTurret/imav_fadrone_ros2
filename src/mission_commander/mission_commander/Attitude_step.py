@@ -112,7 +112,7 @@ class MinimalStepInput(Node):
         elif self.stage == 1:
             self.send_attitude_setpoint(0.0, 0.0, 0.0, 0.1)
             print(self.local_pos.z)
-            if self.local_pos.z < -1.0:  # reached -1 m altitude
+            if self.local_pos.z < -2.0:  # reached -2 m altitude
                 self.stage = 2
                 self.start_time = time.time()
 
