@@ -110,7 +110,7 @@ class MinimalStepInput(Node):
 
         # --- Stage 1: takeoff (simple thrust hold) ---
         elif self.stage == 1:
-            self.send_attitude_setpoint(0.0, 0.0, 0.0, 0.5)
+            self.send_attitude_setpoint(0.0, 0.0, 0.0, 0.3)
             print(self.local_pos.z)
             if self.local_pos.z < -2.0:  # reached -2 m altitude
                 self.stage = 2
@@ -120,7 +120,7 @@ class MinimalStepInput(Node):
         elif self.stage == 2:
             # Example: 10° roll step
             roll_step = np.deg2rad(10)
-            self.send_attitude_setpoint(roll_step, 0.0, 0.0, 0.1)
+            self.send_attitude_setpoint(roll_step, 0.0, 0.0, 0.3)
 
             if time.time() - self.start_time > 3.0:
                 self.stage = 3
