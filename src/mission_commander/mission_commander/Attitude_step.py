@@ -74,7 +74,7 @@ class MinimalStepInput(Node):
         msg = OffboardControlMode()
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         msg.attitude = True
-        msg.thrust_and_torque = True
+        msg.thrust_and_torque = False
         self.offboard_pub.publish(msg)
 
     # ------------------------------------------------------------
@@ -110,7 +110,7 @@ class MinimalStepInput(Node):
 
         # --- Stage 1: takeoff (simple thrust hold) ---
         elif self.stage == 1:
-            self.send_attitude_setpoint(0.0, 0.0, 0.0, 0.1)
+            self.send_attitude_setpoint(0.0, 0.0, 0.0, 0.5)
             print(self.local_pos.z)
             if self.local_pos.z < -2.0:  # reached -2 m altitude
                 self.stage = 2
@@ -127,6 +127,7 @@ class MinimalStepInput(Node):
 
         # --- Stage 3: land ---
         elif self.stage == 3:
+            self.command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1.0, 4.0)  # AUTO
             self.command(VehicleCommand.VEHICLE_CMD_NAV_LAND)
             self.stage = 4
 
