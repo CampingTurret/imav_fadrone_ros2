@@ -14,7 +14,8 @@ from px4_msgs.msg import (
     OffboardControlMode,
     VehicleCommand,
     VehicleAttitudeSetpoint,
-    VehicleLocalPosition
+    VehicleLocalPosition,
+    VehicleThrustSetpoint
 )
 
 class MinimalStepInput(Node):
@@ -38,6 +39,10 @@ class MinimalStepInput(Node):
         # --- Subscribers ---
         self.local_pos = VehicleLocalPosition()
         self.create_subscription(VehicleLocalPosition, '/fmu/out/vehicle_local_position', self.position_callback, qos_profile)
+        
+
+        self.thrust_sp = VehicleThrustSetpoint()
+        self.create_subscription(VehicleThrustSetpoint, '/fmu/out/vehicle_thrust_setpoint', self.thrust_callback, qos_profile)
 
         # --- State ---
         self.stage = 0
@@ -46,8 +51,13 @@ class MinimalStepInput(Node):
         # Timer @ 33 Hz
         self.timer = self.create_timer(0.03, self.loop)
 
+        self.hover_thrust_samples = []
+
     def position_callback(self, msg):
         self.local_pos = msg
+
+    def thrust_callback(self, msg):
+        self.thrust_sp = msg
 
     # ------------------------------------------------------------
     # Helper: send attitude + thrust setpoint
@@ -100,28 +110,46 @@ class MinimalStepInput(Node):
     def loop(self):
         self.send_heartbeat()
 
-        # --- Stage 0: send a few setpoints before switching to offboard ---
+        # --- Stage 0: initiate AUTO takeoff ---
         if self.stage == 0:
-            self.send_attitude_setpoint(0.0, 0.0, 0.0, 0.3)
+            # Switch to AUTO mode
+            self.command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1.0, 4.0)  # AUTO
+            # Trigger takeoff
+            TAKEOFF_ALT = 2.0  # meters above home
+
+            self.command(VehicleCommand.VEHICLE_CMD_NAV_TAKEOFF, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, TAKEOFF_ALT)
+            self.start_time = time.time()
+            self.stage = 0.5
+
+        elif self.stage == 0.5:
+            # Wait until altitude stabilizes near -2 m
+            if abs(self.local_pos.z + 2.0) < 0.2 and abs(self.local_pos.vz) < 0.1:
+                # Collect thrust samples for 1–2 seconds
+                self.hover_thrust_samples.append(self.thrust_sp.xyz[2])
+
+                if time.time() - self.start_time > 2.0:
+                    # Compute average hover thrust
+                    self.hover_thrust = float(np.mean(self.hover_thrust_samples))
+                    print("Detected hover thrust:", self.hover_thrust)
+
+                    # Move to OFFBOARD warm‑up
+                    self.stage = 1
+                    self.start_time = time.time()
+
+        # --- Stage 1: send a few OFFBOARD setpoints before switching ---
+        elif self.stage == 1:
+            self.send_attitude_setpoint(0.0, 0.0, 0.0, self.hover_thrust)
+
             if time.time() - self.start_time > 1.0:
                 self.command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1.0, 6.0)  # OFFBOARD
                 self.command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0)
-                self.stage = 1
-                self.start_time = time.time()
-
-        # --- Stage 1: takeoff (simple thrust hold) ---
-        elif self.stage == 1:
-            self.send_attitude_setpoint(0.0, 0.0, 0.0, 0.4)
-            print(self.local_pos.z)
-            if self.local_pos.z < -2.0:  # reached -2 m altitude
                 self.stage = 2
                 self.start_time = time.time()
 
         # --- Stage 2: apply step input ---
         elif self.stage == 2:
-            # Example: 10° roll step
             roll_step = np.deg2rad(10)
-            self.send_attitude_setpoint(roll_step, 0.0, 0.0, 0.3)
+            self.send_attitude_setpoint(roll_step, 0.0, 0.0, self.hover_thrust)
 
             if time.time() - self.start_time > 3.0:
                 self.stage = 3
@@ -135,6 +163,7 @@ class MinimalStepInput(Node):
         # --- Stage 4: done ---
         elif self.stage == 4:
             pass
+
 
 
 def main(args=None):
