@@ -133,7 +133,7 @@ class MinimalStepInput(Node):
         # --- Stage 0: initiate AUTO takeoff ---
         if self.stage == 0:
             # Switch to AUTO mode
-            self.command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1.0, 4.0)  # AUTO
+            self.command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1.0, 6.0)  # AUTO
             # Trigger takeoff
             self.command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0)
             if self.vehicle_status.arming_state == VehicleStatus.ARMING_STATE_ARMED:
