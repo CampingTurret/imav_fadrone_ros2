@@ -16,7 +16,8 @@ from px4_msgs.msg import (
     VehicleAttitudeSetpoint,
     VehicleLocalPosition,
     VehicleThrustSetpoint,
-    VehicleStatus
+    VehicleStatus,
+    VehicleCommandAck
 )
 
 class MinimalStepInput(Node):
@@ -47,6 +48,12 @@ class MinimalStepInput(Node):
 
         self.vehicle_status = VehicleStatus()
         self.create_subscription(VehicleStatus, '/fmu/out/vehicle_status', self.status_callback, qos_profile)
+
+        self.create_subscription(VehicleCommandAck,
+                        '/fmu/out/vehicle_command_ack',
+                        lambda msg: print("ACK:", msg.command, msg.result),
+                        qos_profile)
+
 
 
         # --- State ---
