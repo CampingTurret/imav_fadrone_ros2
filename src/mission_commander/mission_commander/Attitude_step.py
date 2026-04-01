@@ -137,6 +137,8 @@ class MinimalStepInput(Node):
                 self.command(VehicleCommand.VEHICLE_CMD_NAV_TAKEOFF, p7= TAKEOFF_ALT)
                 self.start_time = time.time()
                 self.stage = 0.5
+            else:
+                print(self.vehicle_status.nav_state)
 
 
         elif self.stage == 0.5:
