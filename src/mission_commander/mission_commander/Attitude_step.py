@@ -59,7 +59,7 @@ class MinimalStepInput(Node):
         # Euler angle commands
         msg.roll_body = roll
         msg.pitch_body = pitch
-        msg.yaw_body = 0.0
+        msg.yaw_body = float('nan')
         msg.yaw_sp_move_rate = yaw_rate
 
         # Thrust in body NED frame (down is positive)
@@ -102,7 +102,7 @@ class MinimalStepInput(Node):
 
         # --- Stage 0: send a few setpoints before switching to offboard ---
         if self.stage == 0:
-            self.send_attitude_setpoint(0.0, 0.0, 0.0, 0.0)
+            self.send_attitude_setpoint(0.0, 0.0, 0.0, 0.1)
             if time.time() - self.start_time > 1.0:
                 self.command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1.0, 6.0)  # OFFBOARD
                 self.command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0)
