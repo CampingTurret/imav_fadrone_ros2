@@ -15,7 +15,8 @@ from px4_msgs.msg import (
     VehicleCommand,
     VehicleAttitudeSetpoint,
     VehicleLocalPosition,
-    VehicleThrustSetpoint
+    VehicleThrustSetpoint,
+    VehicleStatus
 )
 
 class MinimalStepInput(Node):
@@ -44,6 +45,10 @@ class MinimalStepInput(Node):
         self.thrust_sp = VehicleThrustSetpoint()
         self.create_subscription(VehicleThrustSetpoint, '/fmu/out/vehicle_thrust_setpoint', self.thrust_callback, qos_profile)
 
+        self.vehicle_status = VehicleStatus()
+        self.create_subscription(VehicleStatus, '/fmu/out/vehicle_status', self.status_callback, qos_profile)
+
+
         # --- State ---
         self.stage = 0
         self.start_time = time.time()
@@ -58,6 +63,9 @@ class MinimalStepInput(Node):
 
     def thrust_callback(self, msg):
         self.thrust_sp = msg
+
+    def status_callback(self, msg):
+        self.vehicle_status = msg
 
     # ------------------------------------------------------------
     # Helper: send attitude + thrust setpoint
@@ -121,12 +129,15 @@ class MinimalStepInput(Node):
             self.command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1.0, 4.0)  # AUTO
             # Trigger takeoff
             self.command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0)
+            if self.vehicle_status.arming_state == VehicleStatus.ARMING_STATE_ARMED:
+                print("Vehicle is armed")
 
-            TAKEOFF_ALT = 2.0  # meters above home
+                TAKEOFF_ALT = 2.0  # meters above home
 
-            self.command(VehicleCommand.VEHICLE_CMD_NAV_TAKEOFF, p7= TAKEOFF_ALT)
-            self.start_time = time.time()
-            self.stage = 0.5
+                self.command(VehicleCommand.VEHICLE_CMD_NAV_TAKEOFF, p7= TAKEOFF_ALT)
+                self.start_time = time.time()
+                self.stage = 0.5
+
 
         elif self.stage == 0.5:
             # Wait until altitude stabilizes near -2 m
