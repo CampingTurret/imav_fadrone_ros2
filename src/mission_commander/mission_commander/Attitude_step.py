@@ -120,6 +120,8 @@ class MinimalStepInput(Node):
             # Switch to AUTO mode
             self.command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1.0, 4.0)  # AUTO
             # Trigger takeoff
+            self.command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0)
+
             TAKEOFF_ALT = 2.0  # meters above home
 
             self.command(VehicleCommand.VEHICLE_CMD_NAV_TAKEOFF, p7= TAKEOFF_ALT)
@@ -147,7 +149,6 @@ class MinimalStepInput(Node):
 
             if time.time() - self.start_time > 1.0:
                 self.command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1.0, 6.0)  # OFFBOARD
-                self.command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0)
                 self.stage = 2
                 self.start_time = time.time()
 
