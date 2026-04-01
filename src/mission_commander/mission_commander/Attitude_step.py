@@ -91,12 +91,17 @@ class MinimalStepInput(Node):
     # ------------------------------------------------------------
     # Helper: vehicle command
     # ------------------------------------------------------------
-    def command(self, cmd, p1=0.0, p2=0.0):
+    def command(self, cmd, p1=0.0, p2=0.0, p3=0.0, p4=0.0, p5=0.0, p6=0.0, p7=0.0):
         msg = VehicleCommand()
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         msg.command = cmd
         msg.param1 = p1
         msg.param2 = p2
+        msg.param3 = p3
+        msg.param4 = p4
+        msg.param5 = p5
+        msg.param6 = p6
+        msg.param7 = p7
         msg.target_system = 1
         msg.target_component = 1
         msg.source_system = 1
@@ -117,7 +122,7 @@ class MinimalStepInput(Node):
             # Trigger takeoff
             TAKEOFF_ALT = 2.0  # meters above home
 
-            self.command(VehicleCommand.VEHICLE_CMD_NAV_TAKEOFF, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, TAKEOFF_ALT)
+            self.command(VehicleCommand.VEHICLE_CMD_NAV_TAKEOFF, p7= TAKEOFF_ALT)
             self.start_time = time.time()
             self.stage = 0.5
 
