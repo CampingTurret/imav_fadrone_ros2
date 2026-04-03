@@ -166,7 +166,7 @@ class MinimalStepInput(Node):
 
             if time.time() - self.start_time > 10.0:
                 self.start_time = time.time()
-                self.hover_record.append(self.thrust_sp.thrust[2])
+                self.hover_record.append(self.thrust_sp.xyz[2])
 
 
             if time.time() - self.start_time > 10.0:
