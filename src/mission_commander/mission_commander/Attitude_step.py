@@ -161,7 +161,7 @@ class MinimalStepInput(Node):
         elif self.stage == 1:
 
             self.publish_position_setpoint(0.0, 0.0, -10.0, 0.0)
-            self.send_attitude_setpoint(roll_step, 0.0, 0.0, 0.0)
+            self.send_attitude_setpoint(0.0, 0.0, 0.0, 0.0)
 
             if time.time() - self.start_time > 20.0:
                 self.start_time = time.time()
