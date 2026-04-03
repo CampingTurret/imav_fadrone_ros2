@@ -35,6 +35,7 @@ class MinimalStepInput(Node):
         self.offboard_pub = self.create_publisher(OffboardControlMode, '/fmu/in/offboard_control_mode', qos_profile)
 
         self.attitude_pub = self.create_publisher(VehicleAttitudeSetpoint,'/fmu/in/vehicle_attitude_setpoint', qos_profile)
+        self.trajectory_publisher = self.create_publisher(TrajectorySetpoint, '/fmu/in/trajectory_setpoint', qos_profile)
 
         self.command_pub = self.create_publisher(VehicleCommand,'/fmu/in/vehicle_command', qos_profile)
 
@@ -63,7 +64,6 @@ class MinimalStepInput(Node):
         # Timer @ 33 Hz
         self.timer = self.create_timer(0.03, self.loop)
 
-        self.hover_thrust_samples = []
 
     def position_callback(self, msg):
         self.local_pos = msg
@@ -92,14 +92,24 @@ class MinimalStepInput(Node):
 
         self.attitude_pub.publish(msg)
 
+    def publish_position_setpoint(self, x: float, y: float, z: float, yaw: float):
+        msg = TrajectorySetpoint()
+        msg.position = [x, y, z]
+        msg.yaw = yaw
+        msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
+        self.trajectory_publisher.publish(msg)
 
     # ------------------------------------------------------------
     # Helper: offboard heartbeat
     # ------------------------------------------------------------
-    def send_heartbeat(self):
+    def send_heartbeat(self, position: bool = False, attitude:bool = True):
         msg = OffboardControlMode()
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
-        msg.attitude = True
+        msg.position = position
+        msg.velocity = False
+        msg.acceleration = False
+        msg.attitude = attitude
+        msg.body_rate = False
         msg.thrust_and_torque = False
         self.offboard_pub.publish(msg)
 
@@ -128,49 +138,35 @@ class MinimalStepInput(Node):
     # Main loop
     # ------------------------------------------------------------
     def loop(self):
-        self.send_heartbeat()
+        if self.stage < 2:
+            self.send_heartbeat(True, False)
+        if self.stage >= 2:
+            self.send_heartbeat(False, True)
 
-        # --- Stage 0: initiate AUTO takeoff ---
         if self.stage == 0:
-            # Switch to AUTO mode
-            self.command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1.0, 6.0)  # AUTO
-            # Trigger takeoff
-            self.command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0)
-            if self.vehicle_status.arming_state == VehicleStatus.ARMING_STATE_ARMED:
-                print("Vehicle is armed")
+            self.publish_position_setpoint(0.0, 0.0, -2.0, 0.0)
 
-                TAKEOFF_ALT = 2.0  # meters above home
+            if time.time() - self.start_time > 0.5:
+                # Switch to OFFBOARD
+                self.command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1.0, 6.0)
 
-                self.command(VehicleCommand.VEHICLE_CMD_NAV_TAKEOFF, p7= TAKEOFF_ALT)
-                self.start_time = time.time()
-                self.stage = 0.5
-            else:
-                print(self.vehicle_status.nav_state)
+                # Arm
+                self.command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0)
 
-
-        elif self.stage == 0.5:
-            # Wait until altitude stabilizes near -2 m
-            if abs(self.local_pos.z + 2.0) < 0.2 and abs(self.local_pos.vz) < 0.1:
-                # Collect thrust samples for 1–2 seconds
-                self.hover_thrust_samples.append(self.thrust_sp.xyz[2])
-
-                if time.time() - self.start_time > 2.0:
-                    # Compute average hover thrust
-                    self.hover_thrust = float(np.mean(self.hover_thrust_samples))
-                    print("Detected hover thrust:", self.hover_thrust)
-
-                    # Move to OFFBOARD warm‑up
-                    self.stage = 1
+                if self.vehicle_status.arming_state == VehicleStatus.ARMING_STATE_ARMED:
+                    print("Armed in OFFBOARD")
                     self.start_time = time.time()
+                    self.stage = 1
 
-        # --- Stage 1: send a few OFFBOARD setpoints before switching ---
         elif self.stage == 1:
-            self.send_attitude_setpoint(0.0, 0.0, 0.0, self.hover_thrust)
 
-            if time.time() - self.start_time > 1.0:
-                self.command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1.0, 6.0)  # OFFBOARD
-                self.stage = 2
+            self.publish_position_setpoint(0.0, 0.0, -10.0, 0.0)
+            self.send_attitude_setpoint(roll_step, 0.0, 0.0, 0.0)
+
+            if time.time() - self.start_time > 20.0:
                 self.start_time = time.time()
+                self.hover_thrust = 0.4
+                self.stage = 2
 
         # --- Stage 2: apply step input ---
         elif self.stage == 2:
