@@ -60,6 +60,7 @@ class MinimalStepInput(Node):
         # --- State ---
         self.stage = 0
         self.start_time = time.time()
+        self.hover_record = []
 
         # Timer @ 33 Hz
         self.timer = self.create_timer(0.03, self.loop)
@@ -160,13 +161,19 @@ class MinimalStepInput(Node):
 
         elif self.stage == 1:
 
-            self.publish_position_setpoint(0.0, 0.0, -10.0, 0.0)
+            self.publish_position_setpoint(0.0, 0.0, -2.0, 0.0)
             self.send_attitude_setpoint(0.0, 0.0, 0.0, 0.0)
 
-            if time.time() - self.start_time > 20.0:
+            if time.time() - self.start_time > 10.0:
                 self.start_time = time.time()
-                self.hover_thrust = 0.4
+                self.hover_record.append(self.thrust_sp.thrust[2])
+
+
+            if time.time() - self.start_time > 10.0:
+                self.start_time = time.time()
+                self.hover_thrust = abs(sum(self.hover_record)/len(self.hover_record))
                 self.stage = 2
+                print("hover_thrust:", self.hover_thrust)
 
         # --- Stage 2: apply step input ---
         elif self.stage == 2:
