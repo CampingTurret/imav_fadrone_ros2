@@ -162,13 +162,17 @@ class MinimalStepInput(Node):
         elif self.stage == 1:
 
             self.publish_position_setpoint(0.0, 0.0, -2.0, 0.0)
-            self.send_attitude_setpoint(0.0, 0.0, 0.0, 0.0)
 
             if time.time() - self.start_time > 10.0:
-                self.start_time = time.time()
                 self.hover_record.append(self.thrust_sp.xyz[2])
+                if time.time() - self.start_time > 20.0:
+                    self.start_time = time.time()
+                    self.stage = 1.5
 
 
+        elif self.stage == 1.5:
+            self.publish_position_setpoint(0.0, 0.0, -2.0, 0.0)
+            self.send_attitude_setpoint(0.0, 0.0, 0.0, 0.0)
             if time.time() - self.start_time > 10.0:
                 self.start_time = time.time()
                 self.hover_thrust = abs(sum(self.hover_record)/len(self.hover_record))
